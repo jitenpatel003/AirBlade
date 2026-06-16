@@ -155,6 +155,7 @@ const rand4=()=>Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math
 /* live gyro reading the host integrates */
 const rate={a:0,b:0,g:0,have:false};
 const opt={sens:14,invX:false,invY:false,swap:false};
+const VBOOST=1.6;  // up/down rotations are smaller, so amplify the vertical axis
 
 /* ============ HOST ============ */
 function startHost(){
@@ -191,25 +192,25 @@ function windowResized(){resizeCanvas(windowWidth,windowHeight);}
 function spawnFruit(){
   const bomb=Math.random()<0.11, j=random(JUICE);
   G.fruits.push({x:random(width*0.16,width*0.84),y:height+50,vx:random(-3.4,3.4),
-    vy:-random(height*0.019,height*0.024),r:random(34,52),
+    vy:-random(height*0.024,height*0.028),r:random(34,52),
     skin:bomb?'#1b1b24':j[0],flesh:bomb?'#1b1b24':j[1],bomb,sliced:false,rot:random(TWO_PI),vr:random(-.07,.07),wob:random(TWO_PI)});
 }
 
-function updateBlade(dt){
+function updateBlade(dt,fr){
   blade.px=blade.x; blade.py=blade.y;
   if(rate.have){
     let h=rate.g, v=rate.b;
     if(opt.swap){const t=h;h=v;v=t;}
-    // idle bias correction so it rests at centre
-    if(Math.abs(h)<5&&Math.abs(v)<5){bias.h=lerp(bias.h,h,0.03);bias.v=lerp(bias.v,v,0.03);}
+    // idle bias correction so it rests still
+    if(Math.abs(h)<6&&Math.abs(v)<6){bias.h=lerp(bias.h,h,0.06*fr);bias.v=lerp(bias.v,v,0.06*fr);}
     h-=bias.h; v-=bias.v;
     if(opt.invX)h=-h; if(opt.invY)v=-v;
     blade.x+=h*opt.sens*dt;
-    blade.y-=v*opt.sens*dt;
+    blade.y-=v*opt.sens*VBOOST*dt;
   }
-  // gentle return-to-centre keeps it controllable
-  blade.x+=(width/2-blade.x)*0.018;
-  blade.y+=(height/2-blade.y)*0.018;
+  // very soft drift-correction only: the blade holds where you aim
+  blade.x+=(width/2-blade.x)*0.005*fr;
+  blade.y+=(height*0.5-blade.y)*0.005*fr;
   blade.x=constrain(blade.x,0,width); blade.y=constrain(blade.y,0,height);
   blade.spd=dist(blade.x,blade.y,blade.px,blade.py);
   blade.active=blade.spd>9;
@@ -223,8 +224,9 @@ function segDist(px,py,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l2=dx*dx+dy*dy||1;
 function draw(){
   clear();
   if(!G.running)return;
-  const dt=Math.min(deltaTime,40)/1000; G.t++;
-  updateBlade(dt);
+  const fr=Math.min(Math.max(deltaTime,8),40)/16.7;
+  const dt=Math.min(Math.max(deltaTime,8),40)/1000; G.t++;
+  updateBlade(dt,fr);
 
   push();
   if(G.shake>0){translate(random(-G.shake,G.shake),random(-G.shake,G.shake));G.shake*=0.86;}
@@ -236,7 +238,7 @@ function draw(){
   // physics + slicing
   for(const f of G.fruits){
     if(f.sliced)continue;
-    f.vy+=0.42*(deltaTime/16.7); f.x+=f.vx; f.y+=f.vy; f.rot+=f.vr; f.wob+=0.15;
+    f.vy+=0.42*fr; f.x+=f.vx*fr; f.y+=f.vy*fr; f.rot+=f.vr*fr; f.wob+=0.15*fr;
     if(blade.active){
       if(segDist(f.x,f.y,blade.px,blade.py,blade.x,blade.y)<f.r){f.sliced=true;f.bomb?onBomb(f):onSlice(f);}
     }
@@ -396,7 +398,7 @@ async function enableMotion(){
   window.addEventListener('devicemotion',e=>{
     const r=e.rotationRate||{};let a=r.alpha||0,b=r.beta||0,g=r.gamma||0;
     // light low-pass before sending
-    sa=sa*.6+a*.4; sb=sb*.6+b*.4; sg=sg*.6+g*.4;
+    sa=sa*.5+a*.5; sb=sb*.5+b*.5; sg=sg*.5+g*.5;
     if(conn&&conn.open)conn.send({t:'r',a:sa,b:sb,g:sg});
     const mag=Math.min(1,(Math.abs(sb)+Math.abs(sg))/300);
     const ring=Q('#ring');if(ring)ring.style.transform='scale('+(1+mag*0.25)+')';
