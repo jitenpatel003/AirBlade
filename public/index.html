@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Air Blade</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --void:#070710; --panel:rgba(20,22,38,0.55); --line:rgba(255,255,255,0.10);
+    --blade:#7CFF4F; --blade-glow:rgba(124,255,79,0.55);
+    --hot:#FF4D6D; --gold:#FFC857; --ink:#F4F6FF; --muted:#9aa0c0;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:
+    radial-gradient(1200px 800px at 50% -10%, #161a35 0%, var(--void) 60%);
+    color:var(--ink);font-family:"Space Grotesk",system-ui,-apple-system,sans-serif;overflow:hidden;touch-action:none}
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
+  #app{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);
+    border-radius:24px;padding:30px 26px;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+    box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  .wordmark{font-weight:700;letter-spacing:.18em;font-size:13px;color:var(--muted);text-transform:uppercase}
+  h1{font-size:40px;line-height:1.02;margin:8px 0 6px;font-weight:700}
+  h1 .x{color:var(--blade);text-shadow:0 0 24px var(--blade-glow)}
+  p.sub{color:var(--muted);margin:0 0 24px;font-size:15px;line-height:1.5}
+  .btn{display:flex;align-items:center;gap:14px;width:100%;border:1px solid var(--line);
+    background:rgba(255,255,255,.04);color:var(--ink);border-radius:16px;padding:18px 18px;margin-top:12px;
+    font:inherit;font-size:16px;font-weight:500;cursor:pointer;transition:.18s transform,.18s background}
+  .btn:hover{background:rgba(255,255,255,.08)} .btn:active{transform:scale(.98)}
+  .btn .ico{font-size:22px} .btn .meta{margin-left:auto;color:var(--muted);font-size:13px}
+  .btn.primary{background:var(--blade);color:#08120a;border-color:transparent;box-shadow:0 10px 30px var(--blade-glow)}
+  .code-in{width:100%;letter-spacing:.5em;text-align:center;font-size:34px;font-weight:700;
+    background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:16px;color:var(--ink);
+    padding:16px;margin:6px 0 4px;text-transform:uppercase}
+  .row{display:flex;gap:10px;align-items:center;margin-top:10px}
+  .code-big{font-size:54px;font-weight:700;letter-spacing:.2em;color:var(--blade);text-align:center;
+    text-shadow:0 0 30px var(--blade-glow);margin:8px 0}
+  .qr{display:flex;justify-content:center;margin:14px 0 4px;padding:14px;background:#fff;border-radius:14px}
+  .hint{font-size:13px;color:var(--muted);text-align:center;line-height:1.5;margin-top:14px}
+  .pill{display:inline-block;font-size:12px;color:var(--muted);border:1px solid var(--line);
+    padding:5px 12px;border-radius:999px;margin-top:8px}
+  .back{position:fixed;top:18px;left:18px;z-index:30;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;color:var(--ink);font:inherit;font-size:14px;padding:10px 14px;display:none;cursor:pointer}
+  /* game hud */
+  #hud{position:fixed;inset:0;z-index:10;display:none;pointer-events:none}
+  #score{position:absolute;top:18px;right:22px;font-size:30px;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+  #combo{position:absolute;top:56px;right:22px;font-size:16px;color:var(--gold);font-weight:500}
+  .ctrlbar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:10px;z-index:20}
+  .mini{pointer-events:auto;background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:12px;padding:10px 14px;font:inherit;font-size:13px;cursor:pointer}
+  /* controller swing view */
+  #pad{position:fixed;inset:0;z-index:10;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px}
+  #pad .dot{width:120px;height:120px;border-radius:50%;border:2px solid var(--blade);
+    box-shadow:0 0 50px var(--blade-glow), inset 0 0 30px var(--blade-glow);position:relative;margin:18px 0}
+  #pad .dot i{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--blade);
+    left:50%;top:50%;transform:translate(-50%,-50%);box-shadow:0 0 20px var(--blade)}
+  #pad h2{font-size:26px;margin:4px 0}
+  #pad .status{color:var(--muted);font-size:14px;margin-bottom:8px}
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:12px 18px;font-size:14px;z-index:50;display:none}
+  canvas{display:block}
+</style>
+</head>
+<body>
+<button class="back" id="back">‹ Back</button>
+
+<!-- ROLE / SETUP -->
+<div id="app">
+  <div class="card" id="home">
+    <div class="wordmark">Motion arcade</div>
+    <h1>Air&nbsp;Blade<span class="x">⁄</span></h1>
+    <p class="sub">Turn your phone into a sword. Slice the fruit on the big screen by swinging it through the air.</p>
+    <button class="btn primary" id="goHost"><span class="ico">🖥️</span>Play on this screen<span class="meta">tablet / big screen</span></button>
+    <button class="btn" id="goCtrl"><span class="ico">📱</span>Use this as the sword<span class="meta">your phone</span></button>
+    <div class="hint">Open this same page on both devices on the same Wi-Fi. One becomes the screen, the other the controller.</div>
+  </div>
+</div>
+
+<!-- HOST PAIRING -->
+<div id="app2" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;padding:24px">
+  <div class="card">
+    <div class="wordmark">Pair your sword</div>
+    <h1 style="font-size:30px">Scan or type the code</h1>
+    <div class="qr" id="qr"></div>
+    <div class="code-big" id="hostCode">····</div>
+    <div style="text-align:center"><span class="pill" id="hostStatus">Waiting for controller…</span></div>
+    <div class="hint">On your phone, open this page → <b>Use this as the sword</b> → enter the code, or scan the QR.</div>
+  </div>
+</div>
+
+<!-- CONTROLLER JOIN -->
+<div id="app3" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;padding:24px">
+  <div class="card">
+    <div class="wordmark">Connect</div>
+    <h1 style="font-size:30px">Enter the screen's code</h1>
+    <input class="code-in" id="joinCode" maxlength="4" inputmode="text" autocapitalize="characters" placeholder="····">
+    <button class="btn primary" id="joinBtn"><span class="ico">⚔️</span>Connect & enable motion</button>
+    <div class="hint" id="joinStatus">Tip: enabling motion needs a tap — that's normal on phones.</div>
+  </div>
+</div>
+
+<!-- GAME HUD (host) -->
+<div id="hud">
+  <div id="score">0</div>
+  <div id="combo"></div>
+</div>
+<div class="ctrlbar" id="hostBar" style="display:none">
+  <button class="mini" id="recal">Re-center blade</button>
+  <button class="mini" id="sensD">– sens</button>
+  <button class="mini" id="sensU">+ sens</button>
+</div>
+
+<!-- CONTROLLER SWING VIEW -->
+<div id="pad">
+  <div class="wordmark">Connected</div>
+  <h2>Swing me like a sword</h2>
+  <div class="status" id="padStatus">Hold the phone upright, point at the screen, then slash.</div>
+  <div class="dot"><i id="padDot"></i></div>
+  <button class="mini" id="padRecal" style="pointer-events:auto">Re-center</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ---------- shared state ---------- */
+const Q = s => document.querySelector(s);
+let ROLE = null;            // 'host' | 'ctrl'
+let peer = null, conn = null;
+let toastT;
+function toast(m){const t=Q('#toast');t.textContent=m;t.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',2200);}
+function show(id){['app','app2','app3'].forEach(x=>Q('#'+x).style.display='none');if(id)Q('#'+id).style.display='flex';Q('#back').style.display=id&&id!=='app'?'block':'none';}
+
+const ID_PREFIX = 'airblade-x9-';   // namespace so codes don't collide globally
+const rand4 = () => Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*30)]).join('');
+
+/* ---------- live blade signal (host reads this) ---------- */
+const signal = { gamma:0, beta:0, have:false };       // raw from phone
+const offset = { gamma:0, beta:0 };                   // calibration center
+let sens = 11;                                          // screen units per degree
+
+/* =======================================================
+   HOST  (the big screen / tablet)
+   ======================================================= */
+function startHost(){
+  ROLE='host';
+  const code = rand4();
+  Q('#hostCode').textContent = code;
+  const joinUrl = location.origin + location.pathname + '?join=' + code;
+  new QRCode(Q('#qr'), {text:joinUrl, width:150, height:150, colorDark:'#070710', colorLight:'#ffffff'});
+  show('app2');
+
+  peer = new Peer(ID_PREFIX + code, {debug:1});
+  peer.on('error', e => { Q('#hostStatus').textContent = 'Pairing error: ' + e.type + ' — pick another code'; });
+  peer.on('connection', c => {
+    conn = c;
+    c.on('open', () => { Q('#hostStatus').textContent='Sword connected!'; setTimeout(beginGame,500); });
+    c.on('data', d => {
+      if(d.t==='m'){ signal.gamma=d.g; signal.beta=d.b; signal.have=true; }
+      if(d.t==='cal'){ offset.gamma=signal.gamma; offset.beta=signal.beta; }
+    });
+    c.on('close', ()=>toast('Sword disconnected'));
+  });
+}
+
+function beginGame(){
+  show(null);
+  Q('#hud').style.display='block';
+  Q('#hostBar').style.display='flex';
+  game.running = true;
+}
+
+/* ---------- p5 game ---------- */
+let blade = {x:0,y:0,px:0,py:0,speed:0,active:false,trail:[]};
+const game = {running:false, fruits:[], parts:[], score:0, combo:0, comboT:0, t:0};
+const PALETTE = ['#FF4D6D','#FFC857','#5BE7C4','#8C7BFF','#FF8A3D'];
+
+function setup(){
+  const c = createCanvas(windowWidth, windowHeight);
+  c.style('position','fixed'); c.style('inset','0'); c.style('z-index','1');
+  noStroke();
+}
+function windowResized(){ resizeCanvas(windowWidth, windowHeight); }
+
+function spawnFruit(){
+  const bomb = Math.random() < 0.12;
+  game.fruits.push({
+    x: random(width*0.18, width*0.82),
+    y: height + 40,
+    vx: random(-3.2,3.2),
+    vy: random(-(height*0.020), -(height*0.024)),
+    r: random(34,52),
+    col: bomb? '#1a1a22' : random(PALETTE),
+    bomb, sliced:false, rot:random(TWO_PI), vr:random(-0.08,0.08)
+  });
+}
+
+function updateBlade(){
+  blade.px = blade.x; blade.py = blade.y;
+  if(signal.have){
+    const gx = (signal.gamma - offset.gamma);
+    const by = (signal.beta  - offset.beta);
+    blade.x = constrain(width/2  + gx*sens, 0, width);
+    blade.y = constrain(height/2 - by*sens, 0, height);
+  }
+  blade.speed = dist(blade.x,blade.y,blade.px,blade.py);
+  blade.active = blade.speed > 12;
+  blade.trail.push({x:blade.x,y:blade.y,s:blade.speed});
+  if(blade.trail.length>16) blade.trail.shift();
+}
+
+// distance from point P to segment AB
+function segDist(px,py,ax,ay,bx,by){
+  const dx=bx-ax, dy=by-ay; const l2=dx*dx+dy*dy || 1;
+  let t=((px-ax)*dx+(py-ay)*dy)/l2; t=constrain(t,0,1);
+  return dist(px,py, ax+t*dx, ay+t*dy);
+}
+
+function draw(){
+  clear();
+  if(!game.running){ return; }
+  game.t++;
+  // spawn rhythm (speeds up slowly)
+  const rate = max(34, 78 - game.t/140);
+  if(game.t % Math.floor(rate) === 0){ const n=random()<0.4?2:1; for(let i=0;i<n;i++) spawnFruit(); }
+
+  updateBlade();
+
+  // physics + collisions
+  for(const f of game.fruits){
+    if(f.sliced) continue;
+    f.vy += 0.42; f.x += f.vx; f.y += f.vy; f.rot += f.vr;
+    if(blade.active){
+      const d = segDist(f.x,f.y, blade.px,blade.py, blade.x,blade.y);
+      if(d < f.r){
+        f.sliced = true;
+        if(f.bomb){ onBomb(f); } else { onSlice(f); }
+      }
+    }
+  }
+  // cull + missed
+  game.fruits = game.fruits.filter(f=>{
+    if(f.y > height+80 && !f.sliced){ if(!f.bomb){ game.combo=0; } return false; }
+    return f.y < height+200 && !f.sliced;
+  });
+
+  // draw fruits
+  for(const f of game.fruits){
+    push(); translate(f.x,f.y); rotate(f.rot);
+    if(f.bomb){
+      fill('#1a1a22'); circle(0,0,f.r*2);
+      fill('#FF4D6D'); circle(0,-f.r*0.7,8);
+      fill('#FFC857'); for(let a=0;a<TWO_PI;a+=PI/3){ circle(cos(a)*f.r,sin(a)*f.r,5); }
+    } else {
+      fill(0,0,0,40); circle(3,5,f.r*2);
+      fill(f.col); circle(0,0,f.r*2);
+      fill(255,255,255,60); ellipse(-f.r*0.32,-f.r*0.32,f.r*0.7,f.r*0.5);
+    }
+    pop();
+  }
+
+  // particles
+  for(const p of game.parts){ p.vy+=0.3; p.x+=p.vx; p.y+=p.vy; p.life-=4;
+    fill(red(color(p.c)),green(color(p.c)),blue(color(p.c)),p.life);
+    circle(p.x,p.y,p.sz);
+  }
+  game.parts = game.parts.filter(p=>p.life>0);
+
+  // blade trail
+  for(let i=1;i<blade.trail.length;i++){
+    const a=blade.trail[i-1], b=blade.trail[i];
+    const w = map(i,0,blade.trail.length,2,16);
+    const glow = a.s>12?255:90;
+    stroke(124,255,79,glow*(i/blade.trail.length));
+    strokeWeight(w); strokeCap(ROUND);
+    line(a.x,a.y,b.x,b.y);
+  }
+  noStroke();
+  // blade tip
+  fill(124,255,79, blade.active?255:120);
+  circle(blade.x,blade.y, blade.active?20:12);
+
+  if(game.comboT>0){ game.comboT--; if(game.comboT===0) Q('#combo').textContent=''; }
+}
+
+function onSlice(f){
+  game.score += 1 + Math.floor(game.combo/3);
+  game.combo++; game.comboT=90;
+  Q('#score').textContent = game.score;
+  if(game.combo>2) Q('#combo').textContent = game.combo+'× combo';
+  for(let i=0;i<14;i++){
+    game.parts.push({x:f.x,y:f.y,vx:random(-6,6),vy:random(-7,2),sz:random(5,12),c:f.col,life:255});
+  }
+}
+function onBomb(f){
+  game.combo=0; Q('#combo').textContent=''; game.score=Math.max(0,game.score-5);
+  Q('#score').textContent=game.score;
+  for(let i=0;i<22;i++) game.parts.push({x:f.x,y:f.y,vx:random(-9,9),vy:random(-9,3),sz:random(4,14),c:'#FF4D6D',life:255});
+  toast('💥 Bomb! −5');
+}
+
+/* host controls */
+Q('#recal').onclick = ()=>{ offset.gamma=signal.gamma; offset.beta=signal.beta; toast('Blade re-centered'); };
+Q('#sensU').onclick = ()=>{ sens=min(22,sens+1.5); toast('Sensitivity '+sens.toFixed(0)); };
+Q('#sensD').onclick = ()=>{ sens=max(5,sens-1.5); toast('Sensitivity '+sens.toFixed(0)); };
+
+/* =======================================================
+   CONTROLLER  (the phone sword)
+   ======================================================= */
+let orientReady=false;
+function startCtrl(prefill){
+  ROLE='ctrl';
+  if(prefill) Q('#joinCode').value = prefill;
+  show('app3');
+}
+Q('#joinBtn').onclick = async ()=>{
+  const code = (Q('#joinCode').value||'').trim().toUpperCase();
+  if(code.length<4){ Q('#joinStatus').textContent='Enter the 4-character code from the screen.'; return; }
+  await enableMotion();
+  Q('#joinStatus').textContent='Connecting…';
+  peer = new Peer({debug:1});
+  peer.on('open', ()=>{
+    conn = peer.connect(ID_PREFIX + code, {reliable:false});
+    conn.on('open', ()=>{ show(null); Q('#pad').style.display='flex'; toast('Connected!'); });
+    conn.on('error', e=>{ Q('#joinStatus').textContent='Could not connect — check the code.'; });
+  });
+  peer.on('error', e=>{ Q('#joinStatus').textContent='Connection error: '+e.type; });
+};
+
+async function enableMotion(){
+  // iOS needs explicit permission; Android Chrome just works on https
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r!=='granted'){ toast('Motion permission denied'); }
+    }
+  }catch(e){}
+  window.addEventListener('deviceorientation', e=>{
+    orientReady=true;
+    const g = e.gamma||0, b = e.beta||0;
+    if(conn && conn.open){ conn.send({t:'m', g, b}); }
+    // local feedback dot
+    const dx = constrain((g)/45,-1,1)*46, dy = constrain((b-45)/45,-1,1)*46;
+    const dot=Q('#padDot'); if(dot) dot.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${-dy}px))`;
+  }, true);
+}
+function ctrlRecenter(){ if(conn&&conn.open) conn.send({t:'cal'}); toast('Re-centered'); }
+Q('#padRecal').onclick = ctrlRecenter;
+
+/* =======================================================
+   wiring
+   ======================================================= */
+Q('#goHost').onclick = startHost;
+Q('#goCtrl').onclick = ()=>startCtrl('');
+Q('#back').onclick = ()=>{ try{peer&&peer.destroy()}catch(e){}; Q('#hud').style.display='none'; Q('#hostBar').style.display='none'; Q('#pad').style.display='none'; game.running=false; show('app'); };
+
+// deep-link: ?join=CODE jumps straight to controller
+const params = new URLSearchParams(location.search);
+if(params.get('join')) startCtrl(params.get('join').toUpperCase());
+</script>
+</body>
+</html>
