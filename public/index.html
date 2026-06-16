@@ -150,6 +150,18 @@ let peer=null,conn=null,toastT,best=0;
 function toast(m){const t=Q('#toast');t.textContent=m;t.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>t.style.display='none',2000);}
 function show(id){['home','pair','join'].forEach(x=>Q('#'+x).classList.toggle('on',x===id));Q('#back').style.display=(id&&id!=='home')?'block':'none';}
 const PREFIX='airblade-x9-';
+// Network config. STUN (below) lets many DIFFERENT-network devices connect with no setup.
+// For hard cases (mobile data / strict networks) add a free TURN server in the slot marked below.
+const ICE={iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:3478'},
+  {urls:'stun:stun.cloudflare.com:3478'}
+  // ---- TURN (optional, for any-network reliability) -------------------------------
+  // Get FREE credentials (20GB/mo) at https://dashboard.metered.ca  then uncomment + paste:
+  // ,{urls:'turn:global.relay.metered.ca:80',  username:'PASTE_USERNAME', credential:'PASTE_CREDENTIAL'}
+  // ,{urls:'turn:global.relay.metered.ca:443?transport=tcp', username:'PASTE_USERNAME', credential:'PASTE_CREDENTIAL'}
+  // --------------------------------------------------------------------------------
+]};
 const rand4=()=>Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*30)]).join('');
 
 /* live gyro reading the host integrates */
@@ -163,7 +175,7 @@ function startHost(){
   const url=location.origin+location.pathname+'?join='+code;
   Q('#qr').innerHTML=''; new QRCode(Q('#qr'),{text:url,width:150,height:150,colorDark:'#060611',colorLight:'#fff'});
   show('pair');
-  peer=new Peer(PREFIX+code,{debug:1});
+  peer=new Peer(PREFIX+code,{debug:1,config:ICE});
   peer.on('error',e=>Q('#hostStatus').textContent='Pairing issue ('+e.type+') — go Back and retry');
   peer.on('connection',c=>{conn=c;
     c.on('open',()=>{Q('#hostStatus').textContent='Sword connected!';setTimeout(beginGame,450);});
@@ -393,7 +405,7 @@ Q('#joinBtn').onclick=async()=>{
   if(code.length<4){Q('#joinStatus').textContent='Enter the 4-character code from the screen.';return;}
   await enableMotion();
   Q('#joinStatus').textContent='Connecting…';
-  peer=new Peer({debug:1});
+  peer=new Peer({debug:1,config:ICE});
   peer.on('open',()=>{conn=peer.connect(PREFIX+code,{reliable:false});
     conn.on('open',()=>{['home','pair','join'].forEach(x=>Q('#'+x).classList.remove('on'));Q('#back').style.display='block';Q('#pad').style.display='flex';toast('Connected!');});
     conn.on('data',d=>{
@@ -407,22 +419,23 @@ Q('#joinBtn').onclick=async()=>{
   });
   peer.on('error',e=>Q('#joinStatus').textContent='Could not connect — check the code.');
 };
-let sg=0,gx=0,gy=0,gz=0,sp=0;
+let sg=0,sp=0;
 async function enableMotion(){
   try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
     const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')toast('Motion permission denied');}}catch(e){}
+  try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+    await DeviceOrientationEvent.requestPermission();}}catch(e){}
+  // HORIZONTAL: wrist yaw rotation speed -> smooth sweep (kept, since it already feels good)
   window.addEventListener('devicemotion',e=>{
-    // horizontal = yaw rotation speed
     const r=e.rotationRate||{}; sg=sg*.5+(r.gamma||0)*.5;
-    // vertical = phone tilt angle, from gravity (steady, holds position)
-    const ag=e.accelerationIncludingGravity||{};
-    gx=gx*.82+(ag.x||0)*.18; gy=gy*.82+(ag.y||0)*.18; gz=gz*.82+(ag.z||0)*.18;
-    const pitch=Math.atan2(gy,Math.sqrt(gx*gx+gz*gz))*180/Math.PI;  // ~ -90..90
-    sp=sp*.7+pitch*.3;
     if(conn&&conn.open)conn.send({t:'r',g:sg,p:sp});
-    const mag=Math.min(1,(Math.abs(sg)+Math.abs(pitch))/220);
-    const ring=Q('#ring');if(ring)ring.style.transform='scale('+(1+mag*0.25)+')';
-    const dot=Q('#ring i');if(dot)dot.style.transform=`translate(calc(-50% + ${constrain(sg,-90,90)/1.6}px), calc(-50% + ${constrain(-pitch,-60,60)*1.0}px))`;
+  },true);
+  // VERTICAL: the phone's own sensor-fused tilt angle (beta) -> clean, low-noise aim
+  window.addEventListener('deviceorientation',e=>{
+    const beta=(typeof e.beta==='number')?e.beta:sp;
+    sp=sp*.6+beta*.4;
+    const ring=Q('#ring');if(ring)ring.style.transform='scale('+(1+Math.min(1,Math.abs(sg)/150)*0.25)+')';
+    const dot=Q('#ring i');if(dot)dot.style.transform=`translate(calc(-50% + ${constrain(sg,-90,90)/1.6}px), calc(-50% + ${constrain(beta,-60,60)*0.9}px))`;
   },true);
 }
 function ctrlRecenter(){if(conn&&conn.open)conn.send({t:'cal'});toast('Re-centered');}
