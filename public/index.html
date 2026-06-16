@@ -128,6 +128,7 @@
   <div class="status">Sweep side to side to slash. Tilt the phone up or down to aim height.</div>
   <div id="ring"><i></i></div>
   <button class="mini" id="padRecal" style="pointer-events:auto">Re-center blade</button>
+  <button class="btn primary" id="padRestart" style="pointer-events:auto;max-width:280px;margin-top:14px"><span class="ico">↻</span>Restart game</button>
 </div>
 
 <!-- GAME OVER -->
@@ -169,6 +170,7 @@ function startHost(){
     c.on('data',d=>{
       if(d.t==='r'){rate.g=d.g;rate.p=d.p;rate.have=true;}
       if(d.t==='cal'){recenter();}
+      if(d.t==='restart'){restartGame();}
     });
   });
 }
@@ -333,8 +335,10 @@ function gameOver(){
   G.running=false;best=Math.max(best,G.score);
   Q('#finScore').textContent=G.score;Q('#bestScore').textContent='Best: '+best;
   Q('#over').style.display='flex';
+  if(conn&&conn.open)conn.send({t:'over',score:G.score});
 }
-Q('#again').onclick=()=>{Q('#over').style.display='none';resetGame();G.running=true;};
+function restartGame(){Q('#over').style.display='none';resetGame();G.running=true;if(conn&&conn.open)conn.send({t:'go'});}
+Q('#again').onclick=restartGame;
 
 let lastHit=0;
 function hitHaptic(){const n=performance.now();if(n-lastHit>60){lastHit=n;if(conn&&conn.open)conn.send({t:'hit'});}}
@@ -387,7 +391,14 @@ Q('#joinBtn').onclick=async()=>{
   peer=new Peer({debug:1});
   peer.on('open',()=>{conn=peer.connect(PREFIX+code,{reliable:false});
     conn.on('open',()=>{['home','pair','join'].forEach(x=>Q('#'+x).classList.remove('on'));Q('#back').style.display='block';Q('#pad').style.display='flex';toast('Connected!');});
-    conn.on('data',d=>{if(d.t==='hit')navigator.vibrate&&navigator.vibrate(12);});
+    conn.on('data',d=>{
+      if(d.t==='hit')navigator.vibrate&&navigator.vibrate(12);
+      if(d.t==='over'){navigator.vibrate&&navigator.vibrate([90,60,90,60,180]);
+        const s=Q('#pad .status');if(s)s.textContent='💥 Bomb! Game over — tap Restart.';
+        Q('#padRestart').classList.add('act');}
+      if(d.t==='go'){const s=Q('#pad .status');if(s)s.textContent='Sweep to slash. Tilt to aim height.';
+        Q('#padRestart').classList.remove('act');}
+    });
   });
   peer.on('error',e=>Q('#joinStatus').textContent='Could not connect — check the code.');
 };
@@ -411,6 +422,7 @@ async function enableMotion(){
 }
 function ctrlRecenter(){if(conn&&conn.open)conn.send({t:'cal'});toast('Re-centered');}
 Q('#padRecal').onclick=ctrlRecenter;
+Q('#padRestart').onclick=()=>{if(conn&&conn.open){conn.send({t:'restart'});toast('Restarting…');}else toast('Not connected');};
 
 /* wiring */
 Q('#goHost').onclick=startHost;
