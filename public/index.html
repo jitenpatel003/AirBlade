@@ -168,7 +168,7 @@ function startHost(){
   peer.on('connection',c=>{conn=c;
     c.on('open',()=>{Q('#hostStatus').textContent='Sword connected!';setTimeout(beginGame,450);});
     c.on('data',d=>{
-      if(d.t==='r'){rate.g=d.g;rate.p=d.p;rate.have=true;}
+      if(d.t==='r'){if(typeof d.g==='number')rate.g=d.g;if(typeof d.p==='number')rate.p=d.p;rate.have=true;}
       if(d.t==='cal'){recenter();}
       if(d.t==='restart'){restartGame();}
     });
@@ -200,7 +200,7 @@ function spawnFruit(){
 function updateBlade(dt,fr){
   blade.px=blade.x; blade.py=blade.y;
   if(rate.have){
-    if(pitchNeutral===null)pitchNeutral=rate.p;
+    if(pitchNeutral===null||!isFinite(pitchNeutral))pitchNeutral=isFinite(rate.p)?rate.p:0;
     // HORIZONTAL: wrist yaw rotation speed -> sweep (the part that already feels good)
     let h=rate.g;
     if(Math.abs(h)<6)bias.h=lerp(bias.h,h,0.06*fr);   // remove idle drift
@@ -209,11 +209,13 @@ function updateBlade(dt,fr){
     blade.x+=h*opt.sens*dt;
     blade.x+=(width/2-blade.x)*0.005*fr;              // tiny drift-correction on x only
     // VERTICAL: absolute phone tilt -> aim, and it HOLDS where you point
-    let pt=rate.p-pitchNeutral;
+    let pt=(isFinite(rate.p)?rate.p:pitchNeutral)-pitchNeutral;
     if(opt.invY)pt=-pt;
     const targetY=height/2 - pt*opt.sens*1.1;
     blade.y+=(targetY-blade.y)*Math.min(1,0.3*fr);    // smooth follow, no spring
   }
+  if(!isFinite(blade.x))blade.x=width/2;
+  if(!isFinite(blade.y))blade.y=height/2;
   blade.x=constrain(blade.x,0,width); blade.y=constrain(blade.y,0,height);
   blade.spd=dist(blade.x,blade.y,blade.px,blade.py);
   blade.active=blade.spd>6;
@@ -301,7 +303,10 @@ function draw(){
     stroke(255,255,255,(b.a?200:40)*t);strokeWeight(1+t*5);line(a.x,a.y,b.x,b.y);
   }
   drawingContext.restore();noStroke();
-  fill(255,255,255,blade.active?255:150);circle(blade.x,blade.y,blade.active?18:11);
+  drawingContext.save();drawingContext.shadowBlur=22;drawingContext.shadowColor='rgba(139,255,90,.95)';
+  fill(139,255,90,blade.active?255:200);circle(blade.x,blade.y,blade.active?22:16);
+  drawingContext.restore();
+  fill(255,255,255,blade.active?255:180);circle(blade.x,blade.y,blade.active?12:8);
 
   // combo popups
   for(const p of G.pops){p.y-=1.4;p.life-=4;
