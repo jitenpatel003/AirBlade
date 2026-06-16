@@ -119,14 +119,13 @@
   <button class="mini" id="sU">+ speed</button>
   <button class="mini" id="ix">Invert X</button>
   <button class="mini" id="iy">Invert Y</button>
-  <button class="mini" id="sw">Swap axes</button>
 </div>
 
 <!-- CONTROLLER PAD -->
 <div id="pad">
   <div class="eyebrow">Connected</div>
   <h2>Swing me like a sword</h2>
-  <div class="status">Point at the screen and slash. Tap re-center if the blade drifts.</div>
+  <div class="status">Sweep side to side to slash. Tilt the phone up or down to aim height.</div>
   <div id="ring"><i></i></div>
   <button class="mini" id="padRecal" style="pointer-events:auto">Re-center blade</button>
 </div>
@@ -153,9 +152,9 @@ const PREFIX='airblade-x9-';
 const rand4=()=>Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*30)]).join('');
 
 /* live gyro reading the host integrates */
-const rate={a:0,b:0,g:0,have:false};
-const opt={sens:14,invX:false,invY:false,swap:false};
-const VBOOST=1.6;  // up/down rotations are smaller, so amplify the vertical axis
+const rate={g:0,p:0,have:false};   // g = yaw rate (horizontal), p = tilt angle (vertical)
+const opt={sens:14,invX:false,invY:false};
+let pitchNeutral=null;             // calibrated upright/neutral tilt
 
 /* ============ HOST ============ */
 function startHost(){
@@ -168,7 +167,7 @@ function startHost(){
   peer.on('connection',c=>{conn=c;
     c.on('open',()=>{Q('#hostStatus').textContent='Sword connected!';setTimeout(beginGame,450);});
     c.on('data',d=>{
-      if(d.t==='r'){rate.a=d.a;rate.b=d.b;rate.g=d.g;rate.have=true;}
+      if(d.t==='r'){rate.g=d.g;rate.p=d.p;rate.have=true;}
       if(d.t==='cal'){recenter();}
     });
   });
@@ -184,7 +183,7 @@ const JUICE=[['#FF4D6D','#FFB3C1'],['#FFD166','#FFE7A8'],['#5BE7C4','#BFF7EC'],[
 
 function resetGame(){G.fruits=[];G.halves=[];G.parts=[];G.flashes=[];G.pops=[];G.score=0;G.combo=0;G.comboT=0;G.lives=3;G.t=0;G.shake=0;
   blade.x=width/2;blade.y=height/2;blade.trail=[];Q('#score').textContent='0';Q('#combo').style.opacity=0;Q('#lives').textContent='❤❤❤';}
-function recenter(){blade.x=width/2;blade.y=height/2;blade.trail=[];bias.h=0;bias.v=0;toast('Blade re-centered');}
+function recenter(){blade.x=width/2;blade.y=height/2;blade.trail=[];bias.h=0;pitchNeutral=rate.have?rate.p:pitchNeutral;toast('Blade re-centered');}
 
 function setup(){const c=createCanvas(windowWidth,windowHeight);c.style('position','fixed');c.style('inset','0');c.style('z-index','1');}
 function windowResized(){resizeCanvas(windowWidth,windowHeight);}
@@ -199,21 +198,23 @@ function spawnFruit(){
 function updateBlade(dt,fr){
   blade.px=blade.x; blade.py=blade.y;
   if(rate.have){
-    let h=rate.g, v=rate.b;
-    if(opt.swap){const t=h;h=v;v=t;}
-    // idle bias correction so it rests still
-    if(Math.abs(h)<6&&Math.abs(v)<6){bias.h=lerp(bias.h,h,0.06*fr);bias.v=lerp(bias.v,v,0.06*fr);}
-    h-=bias.h; v-=bias.v;
-    if(opt.invX)h=-h; if(opt.invY)v=-v;
+    if(pitchNeutral===null)pitchNeutral=rate.p;
+    // HORIZONTAL: wrist yaw rotation speed -> sweep (the part that already feels good)
+    let h=rate.g;
+    if(Math.abs(h)<6)bias.h=lerp(bias.h,h,0.06*fr);   // remove idle drift
+    h-=bias.h;
+    if(opt.invX)h=-h;
     blade.x+=h*opt.sens*dt;
-    blade.y-=v*opt.sens*VBOOST*dt;
+    blade.x+=(width/2-blade.x)*0.005*fr;              // tiny drift-correction on x only
+    // VERTICAL: absolute phone tilt -> aim, and it HOLDS where you point
+    let pt=rate.p-pitchNeutral;
+    if(opt.invY)pt=-pt;
+    const targetY=height/2 - pt*opt.sens*1.1;
+    blade.y+=(targetY-blade.y)*Math.min(1,0.3*fr);    // smooth follow, no spring
   }
-  // very soft drift-correction only: the blade holds where you aim
-  blade.x+=(width/2-blade.x)*0.005*fr;
-  blade.y+=(height*0.5-blade.y)*0.005*fr;
   blade.x=constrain(blade.x,0,width); blade.y=constrain(blade.y,0,height);
   blade.spd=dist(blade.x,blade.y,blade.px,blade.py);
-  blade.active=blade.spd>9;
+  blade.active=blade.spd>6;
   blade.trail.push({x:blade.x,y:blade.y,a:blade.active});
   if(blade.trail.length>18)blade.trail.shift();
   if(blade.active&&blade.spd>16)Audio.swish(blade.spd);
@@ -240,7 +241,7 @@ function draw(){
     if(f.sliced)continue;
     f.vy+=0.42*fr; f.x+=f.vx*fr; f.y+=f.vy*fr; f.rot+=f.vr*fr; f.wob+=0.15*fr;
     if(blade.active){
-      if(segDist(f.x,f.y,blade.px,blade.py,blade.x,blade.y)<f.r){f.sliced=true;f.bomb?onBomb(f):onSlice(f);}
+      if(segDist(f.x,f.y,blade.px,blade.py,blade.x,blade.y)<f.r+18){f.sliced=true;f.bomb?onBomb(f):onSlice(f);}
     }
   }
   G.fruits=G.fruits.filter(f=>{
@@ -344,7 +345,6 @@ Q('#sU').onclick=()=>{opt.sens=Math.min(28,opt.sens+2);toast('Speed '+opt.sens);
 Q('#sD').onclick=()=>{opt.sens=Math.max(6,opt.sens-2);toast('Speed '+opt.sens);};
 Q('#ix').onclick=e=>{opt.invX=!opt.invX;e.target.classList.toggle('act',opt.invX);};
 Q('#iy').onclick=e=>{opt.invY=!opt.invY;e.target.classList.toggle('act',opt.invY);};
-Q('#sw').onclick=e=>{opt.swap=!opt.swap;e.target.classList.toggle('act',opt.swap);};
 
 /* ============ AUDIO (synthesised, no files) ============ */
 const Audio={ctx:null,lastSwish:0,
@@ -391,18 +391,22 @@ Q('#joinBtn').onclick=async()=>{
   });
   peer.on('error',e=>Q('#joinStatus').textContent='Could not connect — check the code.');
 };
-let sa=0,sb=0,sg=0;
+let sg=0,gx=0,gy=0,gz=0,sp=0;
 async function enableMotion(){
   try{if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
     const r=await DeviceMotionEvent.requestPermission();if(r!=='granted')toast('Motion permission denied');}}catch(e){}
   window.addEventListener('devicemotion',e=>{
-    const r=e.rotationRate||{};let a=r.alpha||0,b=r.beta||0,g=r.gamma||0;
-    // light low-pass before sending
-    sa=sa*.5+a*.5; sb=sb*.5+b*.5; sg=sg*.5+g*.5;
-    if(conn&&conn.open)conn.send({t:'r',a:sa,b:sb,g:sg});
-    const mag=Math.min(1,(Math.abs(sb)+Math.abs(sg))/300);
+    // horizontal = yaw rotation speed
+    const r=e.rotationRate||{}; sg=sg*.5+(r.gamma||0)*.5;
+    // vertical = phone tilt angle, from gravity (steady, holds position)
+    const ag=e.accelerationIncludingGravity||{};
+    gx=gx*.82+(ag.x||0)*.18; gy=gy*.82+(ag.y||0)*.18; gz=gz*.82+(ag.z||0)*.18;
+    const pitch=Math.atan2(gy,Math.sqrt(gx*gx+gz*gz))*180/Math.PI;  // ~ -90..90
+    sp=sp*.7+pitch*.3;
+    if(conn&&conn.open)conn.send({t:'r',g:sg,p:sp});
+    const mag=Math.min(1,(Math.abs(sg)+Math.abs(pitch))/220);
     const ring=Q('#ring');if(ring)ring.style.transform='scale('+(1+mag*0.25)+')';
-    const dot=Q('#ring i');if(dot)dot.style.transform=`translate(calc(-50% + ${constrain(sg,-90,90)/1.6}px), calc(-50% + ${constrain(sb,-90,90)/1.6}px))`;
+    const dot=Q('#ring i');if(dot)dot.style.transform=`translate(calc(-50% + ${constrain(sg,-90,90)/1.6}px), calc(-50% + ${constrain(-pitch,-60,60)*1.0}px))`;
   },true);
 }
 function ctrlRecenter(){if(conn&&conn.open)conn.send({t:'cal'});toast('Re-centered');}
